@@ -80,6 +80,12 @@ Befehle in deinem MUD-Client (sie gehen nicht ans MUD):
 | `/claude on` | Mitlesen einschalten (nötig als Gast ohne Passwort) |
 | `/claude off` | Mitlesen pausieren |
 | `/claude status` | Stand anzeigen |
+| `/claude connect` | Neu mit dem MUD verbinden, nachdem die Verbindung beendet wurde |
+| `/claude disconnect` | Verbindung zum MUD trennen, z.B. im Login-Bildschirm |
+
+Endet die Verbindung zum MUD (`quit`, Timeout, `/claude disconnect`), bleibt dein
+Client mit dem Proxy verbunden. Der Proxy verbindet sich nie von selbst neu, nur
+beim Verbinden deines Clients oder mit `/claude connect`.
 
 **Schutz deiner Zugangsdaten:**
 

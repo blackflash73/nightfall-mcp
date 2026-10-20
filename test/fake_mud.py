@@ -59,6 +59,10 @@ class Handler(socketserver.BaseRequestHandler):
         self.page = None                # aktuelle Pager-Seite oder None
         self.state = "name"
         self.lines = []                 # empfangene Zeilen (fuer Tests)
+        self.closed = False             # Client hat die Verbindung getrennt
+
+    def finish(self):
+        self.closed = True
 
     def out(self, text: str):
         self.request.sendall(text.encode("utf-8"))

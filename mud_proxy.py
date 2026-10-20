@@ -26,7 +26,9 @@ Befehle in deinem MUD-Client (gehen NICHT ans MUD):
     /claude on      Mitlesen einschalten (z.B. als Gast ohne Passwort)
     /claude off     Mitlesen pausieren
     /claude status  aktuellen Stand anzeigen
-    /claude connect neu mit dem MUD verbinden, nachdem die Verbindung beendet wurde
+    /claude connect     neu mit dem MUD verbinden, nachdem die Verbindung beendet wurde
+    /claude disconnect  Verbindung zum MUD trennen (z.B. im Login-Bildschirm);
+                        dein Client bleibt mit dem Proxy verbunden
 """
 
 import argparse
@@ -274,6 +276,12 @@ class Proxy:
                 self.to_client("schon mit dem MUD verbunden")
             else:
                 self.start_mud()
+        elif arg == "disconnect":
+            mud = self.mud
+            if mud:
+                self.mud_ended(mud, "von dir getrennt")
+            else:
+                self.to_client(self.status_text())
         else:
             self.to_client(self.status_text())
         return True
@@ -294,7 +302,7 @@ class Proxy:
             self.history.clear()
         log(f"Spiel gestartet: {self.mud_addr[0]}:{self.mud_addr[1]}")
         self.to_client("Claude liest erst nach dem Login mit. "
-                       "Befehle: /claude on | off | status | connect")
+                       "Befehle: /claude on | off | status | connect | disconnect")
         self.to_control("neues Spiel gestartet - Claude liest nach dem Login mit")
         threading.Thread(target=self.pump_mud, args=(mud,), daemon=True).start()
 

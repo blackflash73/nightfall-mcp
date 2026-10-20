@@ -313,6 +313,29 @@ class TestReconnect(ProxyTest):
         self.assertNotIn(PASSWORD, out)
         self.assertNotIn("Enter your name", out)
 
+    def test_disconnect_in_login_screen(self):
+        self.attach()
+        self.user = UserClient(self.play_port, negotiate=True)
+        self.user.wait_for("Enter your name")
+        self.user.send("/claude disconnect")
+        self.user.wait_for("Verbindung zum MUD beendet (von dir getrennt)")
+        end = time.time() + 2
+        while not self.mud.connections[0].closed and time.time() < end:
+            time.sleep(0.05)
+        self.assertTrue(self.mud.connections[0].closed)      # MUD-Verbindung wirklich zu
+        self.assertNotIn("/claude disconnect", self.mud_lines())
+        self.user.send("/claude status")                     # Client ist noch verbunden
+        self.user.wait_for("nicht mit dem MUD verbunden")
+        self.user.send("/claude disconnect")                 # zweimal ist harmlos
+        time.sleep(0.3)
+        self.assertEqual(1, self.user.text.count("Verbindung zum MUD beendet"))
+        self.user.send("/claude connect")                    # und wieder verbinden
+        end = time.time() + 3
+        while self.user.text.count("Enter your name") < 2 and time.time() < end:
+            time.sleep(0.05)
+        self.assertEqual(2, len(self.mud.connections))
+        self.assertIn("Spiel beendet (von dir getrennt)", self.read())
+
     def test_client_disconnect_ends_game(self):
         self.attach()
         self.user_login(negotiate=True)
