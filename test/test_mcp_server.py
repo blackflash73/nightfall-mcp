@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from fake_mud import DONT, ECHO, IAC, TTYPE, WONT, FakeMud  # noqa: E402
+from fake_mud import DONT, IAC, SGA, TTYPE, WONT, FakeMud  # noqa: E402
 
 SERVER = Path(__file__).parent.parent / "mud_mcp_server.py"
 
@@ -94,7 +94,7 @@ class TestBasics(BridgeTest):
     def test_telnet_options_refused(self):
         self.send("guest")                          # sorgt dafuer, dass Antworten da sind
         raw = bytes(self.mud.connections[0].raw)
-        self.assertIn(bytes((IAC, DONT, ECHO)), raw)
+        self.assertIn(bytes((IAC, DONT, SGA)), raw)
         self.assertIn(bytes((IAC, WONT, TTYPE)), raw)
 
     def test_login_and_look(self):

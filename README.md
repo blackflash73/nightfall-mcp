@@ -18,9 +18,11 @@ sauberen Text zurück:
 
 | Tool | Beschreibung |
 |---|---|
-| `mud_connect(host="nightfall.org", port=4242, wait=2.0)` | Verbindet und gibt den Login-Bildschirm zurück |
+| `mud_connect(host="nightfall.org", port=4242, wait=2.0)` | Verbindet direkt und gibt den Login-Bildschirm zurück |
+| `mud_attach(port=4001, wait=0.5)` | Hängt sich an den lokalen Proxy, in dem du selbst spielst ([siehe unten](#selbst-spielen-claude-liest-mit)) |
 | `mud_send(command, wait=0.8)` | Schickt einen Befehl und gibt die Antwort zurück |
 | `mud_read(wait=1.0)` | Gibt neue Ausgabe seit dem letzten Lesen zurück (andere Spieler, Timer) |
+| `mud_recent(lines=40)` | Die letzten Zeilen der Ausgabe, auch bereits gelesene |
 | `mud_disconnect()` | Trennt die Verbindung |
 
 `wait` ist die Wartezeit in Sekunden, bevor die Ausgabe eingesammelt wird.
@@ -48,6 +50,53 @@ claude mcp get nightfall
 ```
 
 Die Tools stehen ab der nächsten Claude-Code-Session zur Verfügung.
+
+## Selbst spielen, Claude liest mit
+
+Mit `mud_proxy.py` spielst du in deinem eigenen MUD-Client, und Claude liest mit
+und gibt Tipps:
+
+```
+  dein MUD-Client ──► 127.0.0.1:4000 ──► mud_proxy.py ──► nightfall.org:4242
+  Claude (MCP)    ──► 127.0.0.1:4001 ──┘  (Mitlese-Anschluss)
+```
+
+1. Proxy in einem eigenen Fenster starten:
+   ```powershell
+   .\.venv\Scripts\python.exe mud_proxy.py
+   ```
+2. MUD-Client mit `127.0.0.1`, Port `4000` verbinden, z.B. [Mudlet](https://www.mudlet.org/)
+   oder PuTTY (Verbindungstyp „Telnet“). Erst jetzt verbindet sich der Proxy mit dem MUD.
+3. In Claude Code sagen: „Häng dich an den MUD-Proxy“ (Tool `mud_attach`).
+4. Normal einloggen und spielen. Claude fragen, z.B. „Wo finde ich die Gilde?“
+
+Claude darf standardmäßig **nur mitlesen**. Mit `mud_proxy.py --allow-send` darf
+Claude auch Befehle schicken; sie erscheinen in deinem Client als `*** Claude: …`.
+
+Befehle in deinem MUD-Client (sie gehen nicht ans MUD):
+
+| Befehl | Wirkung |
+|---|---|
+| `/claude on` | Mitlesen einschalten (nötig als Gast ohne Passwort) |
+| `/claude off` | Mitlesen pausieren |
+| `/claude status` | Stand anzeigen |
+
+**Schutz deiner Zugangsdaten:**
+
+- Was du tippst, leitet der Proxy nur weiter. Es wird nie gespeichert,
+  protokolliert oder an Claude gegeben, also auch nicht dein Passwort.
+- Claude sieht nichts aus der Login-Phase. Das Mitlesen beginnt erst, wenn das MUD
+  nach der Passwort-Eingabe das Echo wieder einschaltet (Telnet `WILL ECHO` →
+  `WONT ECHO`).
+- Während Login und Passwort-Eingabe kann Claude nichts senden, auch nicht mit
+  `--allow-send`.
+- Der Proxy schreibt nichts auf die Platte. In seinem Fenster stehen nur
+  Statusmeldungen.
+
+Grenzen: Dein Charaktername taucht nach dem Login in Spieltexten auf („Welcome
+back, …“, `who`). Schaltet ein MUD das Echo dauerhaft ab (Zeichenmodus), startet
+das Mitlesen nicht automatisch; dann nach dem Login `/claude on` tippen. Claude
+kann in diesem Fall nichts senden.
 
 ## Datenschutz: Nachrichten anderer Spieler
 
@@ -90,9 +139,11 @@ verwenden.
 ## Tests
 
 `test/fake_mud.py` ist ein kleiner Fake-MUD, der nur auf `127.0.0.1` lauscht. Er
-simuliert Telnet-Aushandlung, ANSI-Farben, `\r\n`, Gast-Login, den SMore-Pager und
-Nachrichten anderer Spieler. Die Tests starten den MCP-Server als echten Prozess
-und sprechen MCP mit ihm, genau wie Claude Code:
+simuliert Telnet-Aushandlung, ANSI-Farben, `\r\n`, Gast-Login, Login mit Passwort
+(Name ungleich `guest`), den SMore-Pager und Nachrichten anderer Spieler. Die Tests
+starten MCP-Server und Proxy als echte Prozesse, genau wie im Betrieb. Sie prüfen
+unter anderem, dass das Passwort beim MUD ankommt, aber nie bei Claude oder in der
+Ausgabe des Proxys:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s test -v

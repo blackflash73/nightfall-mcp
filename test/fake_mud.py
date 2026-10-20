@@ -23,7 +23,7 @@ import threading
 import time
 
 IAC, DONT, DO, WONT, WILL, SB, SE = 255, 254, 253, 252, 251, 250, 240
-ECHO, TTYPE = 1, 24
+ECHO, SGA, TTYPE = 1, 3, 24
 RED, RESET = "\x1b[1;31m", "\x1b[0m"
 
 BANNER = (
@@ -58,6 +58,7 @@ class Handler(socketserver.BaseRequestHandler):
         self.server.connections.append(self)
         self.page = None                # aktuelle Pager-Seite oder None
         self.state = "name"
+        self.lines = []                 # empfangene Zeilen (fuer Tests)
 
     def out(self, text: str):
         self.request.sendall(text.encode("utf-8"))
@@ -72,7 +73,7 @@ class Handler(socketserver.BaseRequestHandler):
 
     def handle(self):
         # Telnet-Optionen anbieten/anfragen - die Bruecke muss sie ablehnen
-        self.request.sendall(bytes((IAC, WILL, ECHO, IAC, DO, TTYPE)))
+        self.request.sendall(bytes((IAC, WILL, SGA, IAC, DO, TTYPE)))
         self.request.sendall(bytes((IAC, SB, TTYPE, 1, IAC, SE)))
         self.out(BANNER)
         pending = b""
@@ -85,13 +86,27 @@ class Handler(socketserver.BaseRequestHandler):
                 return
             self.raw += data
             pending += strip_telnet(data)
+            # Zeilenenden wie ein Telnet-Server: \r\n, \r\0 und \n
+            pending = pending.replace(b"\r\n", b"\n").replace(b"\r\0", b"\n")
             while b"\n" in pending:
                 line, pending = pending.split(b"\n", 1)
-                if not self.command(line.decode("utf-8", "replace").strip("\r ")):
+                text = line.decode("utf-8", "replace").strip("\r ")
+                self.lines.append(text)
+                if not self.command(text):
                     return
 
     def command(self, cmd: str) -> bool:
-        if self.state == "name":
+        if self.state == "name" and cmd.lower() != "guest":
+            # echter Charakter: Passwort ohne Echo abfragen, wie LDMud (input_to noecho)
+            self.state = "password"
+            self.name = cmd.capitalize()
+            self.out("Password: ")
+            self.request.sendall(bytes((IAC, WILL, ECHO)))
+        elif self.state == "password":
+            self.state = "game"
+            self.request.sendall(bytes((IAC, WONT, ECHO)))
+            self.out(f"\r\nWelcome back, {self.name}!\r\n" + ROOM)
+        elif self.state == "name":
             self.state = "term"
             self.out("Welcome to Fakefall!\r\n"
                      "Please select a terminal type (You can change later with <stty>)\r\n")
@@ -131,11 +146,16 @@ class Handler(socketserver.BaseRequestHandler):
 
 
 def strip_telnet(data: bytes) -> bytes:
-    """Entfernt die Telnet-Antworten des Clients (IAC + 2 Bytes)."""
+    """Entfernt Telnet-Sequenzen des Clients (Optionen und IAC SB ... IAC SE)."""
     out, i = bytearray(), 0
     while i < len(data):
         if data[i] == IAC and i + 1 < len(data):
-            i += 3 if data[i + 1] in (DO, DONT, WILL, WONT) else 2
+            cmd = data[i + 1]
+            if cmd == SB:
+                end = data.find(bytes((IAC, SE)), i + 2)
+                i = len(data) if end < 0 else end + 2
+            else:
+                i += 3 if cmd in (DO, DONT, WILL, WONT) else 2
             continue
         out.append(data[i])
         i += 1

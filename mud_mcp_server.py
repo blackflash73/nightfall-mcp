@@ -3,10 +3,17 @@
 mud_mcp_server.py — MCP-Server: Telnet-Bruecke zu NightFall (oder jedem MUD).
 
 Tools:
-    mud_connect(host, port, wait)   -> verbindet, gibt Begruessungstext zurueck
+    mud_connect(host, port, wait)   -> verbindet direkt, gibt Begruessungstext zurueck
+    mud_attach(port, wait)          -> haengt sich an mud_proxy.py (du spielst, Claude liest mit)
     mud_send(command, wait)         -> schickt einen Befehl, gibt die Antwort zurueck
     mud_read(wait)                  -> gibt neu aufgelaufene Ausgabe zurueck
+    mud_recent(lines)               -> die letzten Zeilen der Ausgabe
     mud_disconnect()                -> trennt
+
+Im Proxy-Modus (mud_attach) haelt mud_proxy.py die Verbindung zum MUD. Claude
+sieht nur die Ausgabe des MUDs nach dem Login, nie deine Eingaben, und darf
+nur senden, wenn der Proxy mit --allow-send laeuft. Der Pager wird dann nicht
+automatisch geblaettert, weil das dein Spiel stoeren wuerde.
 
 Transport: stdio.  Abhaengigkeit:  pip install -r requirements.txt   (mcp>=2,<3, Python 3.10+)
 
@@ -29,6 +36,7 @@ import re
 import socket
 import threading
 import time
+from collections import deque
 
 from mcp.server.mcpserver import MCPServer
 
@@ -39,6 +47,7 @@ ANSI_RE = re.compile(rb"\x1b\[[0-9;?]*[ -/]*[@-~]")
 PAGER_RE = re.compile(r"=== SMore: Lines \d+\.\.\d+ of \d+ \[[^\]\n]*\][^\n]*\n?$")
 PAGE_WAIT = 0.6   # Sekunden Wartezeit pro weitergeblaetterter Seite
 MAX_PAGES = 50    # Schutz gegen Endlosschleifen
+HISTORY_LINES = 2000   # fuer mud_recent
 
 # --- Filter fuer Nachrichten anderer Spieler ---------------------------------
 PROMPT_PREFIX_RE = re.compile(r"^((?:> )*)")
@@ -97,6 +106,8 @@ class Session:
         self.lock = threading.Lock()
         self.closed_note = None
         self.pending = ""   # zurueckgehaltene, unvollstaendige Zeile (Filter)
+        self.auto_page = True
+        self.history = deque(maxlen=HISTORY_LINES)   # gefilterte Ausgabe, nur im Speicher
 
     def _process(self, data: bytes):
         """Trennt sichtbaren Text von Telnet-Kommandos, lehnt Optionen ab."""
@@ -162,7 +173,7 @@ class Session:
                     self.buf += text
         self.running = False
 
-    def connect(self, host, port):
+    def connect(self, host, port, auto_page=True):
         self.disconnect()
         s = socket.create_connection((host, port), timeout=10)
         self.sock = s
@@ -171,6 +182,8 @@ class Session:
         self.buf = bytearray()
         self.closed_note = None
         self.pending = ""
+        self.auto_page = auto_page
+        self.history.clear()
         self.reader = threading.Thread(target=self._read_loop, daemon=True)
         self.reader.start()
 
@@ -200,7 +213,7 @@ class Session:
 
     def send(self, command: str):
         if not self.sock or not self.running:
-            raise RuntimeError("nicht verbunden - erst mud_connect aufrufen")
+            raise RuntimeError("nicht verbunden - erst mud_connect oder mud_attach aufrufen")
         self.sock.sendall(command.encode("utf-8", "replace") + b"\r\n")
 
     def disconnect(self):
@@ -225,14 +238,17 @@ def collect(wait: float) -> str:
     time.sleep(max(0.0, wait))
     out = session.drain()
     pages = 0
-    while PAGER_RE.search(out) and session.running:
+    while session.auto_page and PAGER_RE.search(out) and session.running:
         if pages >= MAX_PAGES:
-            return out + f"\n[Pager nach {MAX_PAGES} Seiten angehalten - mud_send('') blaettert weiter, 'q' beendet]"
+            out += f"\n[Pager nach {MAX_PAGES} Seiten angehalten - mud_send('') blaettert weiter, 'q' beendet]"
+            break
         out = PAGER_RE.sub("", out)
         session.send("")
         time.sleep(PAGE_WAIT)
         out += session.drain()
         pages += 1
+    if out:
+        session.history.extend(out.split("\n"))
     return out
 
 
@@ -247,11 +263,42 @@ def mud_connect(host: str = "nightfall.org", port: int = 4242, wait: float = 2.0
 
 
 @mcp.tool()
+def mud_attach(port: int = 4001, wait: float = 0.5) -> str:
+    """Haengt sich an den lokalen mud_proxy.py, in dem der Benutzer selbst spielt.
+
+    Gibt den Stand des Proxys und die bisherige Ausgabe seit dem Login zurueck.
+    Danach mit mud_read/mud_recent mitlesen und dem Benutzer Tipps geben.
+    Senden (mud_send) klappt nur, wenn der Proxy mit --allow-send laeuft.
+    """
+    try:
+        session.connect("127.0.0.1", port, auto_page=False)
+    except OSError as e:
+        return (f"Proxy nicht erreichbar auf 127.0.0.1:{port}: {e}\n"
+                "Laeuft 'python mud_proxy.py' in einem eigenen Fenster?")
+    return collect(wait) or "(angemeldet, noch keine Ausgabe)"
+
+
+@mcp.tool()
+def mud_recent(lines: int = 40) -> str:
+    """Gibt die letzten Zeilen der (gefilterten) Ausgabe zurueck, inkl. bereits gelesener.
+
+    Gut, um im Proxy-Modus den aktuellen Spielstand zu ueberblicken.
+    """
+    collect(0)
+    recent = list(session.history)[-max(1, lines):]
+    text = "\n".join(recent).strip("\n")
+    if session.closed_note and not session.running:
+        text += ("\n" if text else "") + session.closed_note
+    return text or "(noch keine Ausgabe)"
+
+
+@mcp.tool()
 def mud_send(command: str, wait: float = 0.8) -> str:
     """Schickt einen Befehl ans MUD und gibt die darauffolgende Ausgabe zurueck.
 
     ACHTUNG: 'command' landet im Chatverlauf. Kein echtes Passwort hier verwenden -
     lieber einen Wegwerf-Charakter nehmen oder dir bewusst sein, dass es im Log steht.
+    Im Proxy-Modus nur moeglich, wenn der Benutzer den Proxy mit --allow-send startet.
     """
     try:
         session.send(command)
