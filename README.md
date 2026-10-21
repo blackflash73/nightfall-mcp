@@ -167,3 +167,46 @@ mud_connect(host="127.0.0.1", port=4000)
 
 Befehle im Fake-MUD: `look`, `read map` (Pager), `chatter` (Nachrichten anderer
 Spieler), `split` (über zwei Pakete verteilte Nachricht), `quit`.
+
+## Mitwirken
+
+Beiträge sind willkommen. `main` ist geschützt: Änderungen kommen nur über einen
+Pull Request, und jeder PR braucht eine Freigabe.
+
+### Ablauf
+
+1. Repo klonen (Mitarbeiter) oder forken (alle anderen) und die Umgebung
+   einrichten, siehe [Installation](#installation).
+2. Einen Branch anlegen, z.B. `git switch -c fix/pager-timeout`.
+3. Ändern und die Tests laufen lassen. Alle müssen bestehen:
+   ```powershell
+   .\.venv\Scripts\python.exe -m unittest discover -s test -v
+   ```
+4. Für neues Verhalten einen Test ergänzen, in `test/test_mcp_server.py`
+   (MCP-Server) oder `test/test_proxy.py` (Proxy). Braucht der Test neue
+   MUD-Ausgaben, `test/fake_mud.py` entsprechend erweitern.
+5. Pushen und einen Pull Request gegen `main` öffnen. Im PR kurz beschreiben,
+   was sich ändert und warum.
+
+### Regeln
+
+- **Nicht gegen den echten Server testen.** Jeder Login und Logout wird im MUD
+  allen Spielern gemeldet. Getestet wird gegen `test/fake_mud.py`. Ist ein
+  Live-Test unvermeidbar: vorher im PR absprechen, dann eine einzige Sitzung mit
+  allen nötigen Befehlen.
+- **Keine echten Spielerdaten.** In Code, Tests, Commits, Issues und PRs keine
+  echten Spielernamen, Channel-Nachrichten oder Mitschnitte aus dem MUD verwenden.
+  Für Beispiele generische Namen wie Bob, Alice, Bill oder Joe nehmen und
+  Nachrichten selbst ausdenken.
+- **Keine Zugangsdaten.** Passwörter und echte Charakternamen gehören weder in
+  den Code noch in Tests oder Beispiele. Tests verwenden eigene Fantasie-Passwörter.
+- **Datenschutz-Schutzmechanismen nicht aufweichen.** Änderungen am Channel-Filter
+  oder an der Login-Erkennung im Proxy brauchen einen Test, der zeigt, dass weder
+  Passwörter noch Nachrichten anderer Spieler bei Claude ankommen.
+- **Commit-E-Mail:** Am besten die GitHub-noreply-Adresse verwenden
+  (`ID+benutzername@users.noreply.github.com`, zu finden unter
+  [Settings → Emails](https://github.com/settings/emails)), damit keine private
+  Adresse in der Historie landet.
+- **Stil:** Kommentare, Docstrings und Meldungen sind auf Deutsch, ohne Umlaute im
+  Code (`ae`, `oe`, `ue`). Abhängigkeiten nur, wenn es nicht anders geht; bisher
+  reicht die Standardbibliothek plus `mcp`.
