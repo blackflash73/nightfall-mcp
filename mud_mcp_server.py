@@ -24,10 +24,13 @@ ANSI-Farbcodes werden fuer die Rueckgabe entfernt. Der NightFall-Pager
 
 Datenschutz: Nachrichten anderer Spieler werden VOR der Rueckgabe entfernt und
 landen so nicht im Claude-Session-Protokoll. Gesteuert ueber die Umgebungs-
-variable MUD_FILTER (Komma-Liste, Standard "channels,tells"):
+variable MUD_FILTER (Komma-Liste, Standard "channels,tells,say"):
     channels  Kanalzeilen wie "[Bill] text" oder "[news:Bob enters the world]"
     tells     private Nachrichten: "Bob tells you: ...", "Bob whispers to you: ..."
-    say       Sprache im Raum: "Bob says: ..." (blendet auch NPC-Saetze aus!)
+    say       Sprache von Spielern im Raum: "Bob says: ...". Saetze von NPCs bleiben
+              sichtbar. Als Spieler gilt, wer in der who-Liste, in einem Kanal
+              oder in einem Tell vorkam (nur im Speicher). Unbekannte Sprecher
+              gelten als NPC, darum einmal "who" eingeben.
     none      keinen Filter verwenden
 """
 
@@ -50,13 +53,21 @@ MAX_PAGES = 50    # Schutz gegen Endlosschleifen
 HISTORY_LINES = 2000   # fuer mud_recent
 
 # --- Filter fuer Nachrichten anderer Spieler ---------------------------------
-PROMPT_PREFIX_RE = re.compile(r"^((?:> )*)")
+# Prompt vor einer Nachricht, z.B. "> ", "> > " oder "->>" (nach Fragen des MUDs)
+PROMPT_PREFIX_RE = re.compile(r"^((?:-?>+ ?)*)")
 FILTER_PATTERNS = {
     # "[Bill] wer ist online?", "[news:Bob enters the world]", "[chat:Bob] hi"
-    "channels": re.compile(r"^\[[^\]\n]{1,60}\](?: .*)?$"),
+    # "[fan:Joe sings ...", auch wenn die "]" erst in einer Folgezeile kommt
+    "channels": re.compile(r"^\[(?:[^\]\n]{1,60}\](?: .*)?$|[\w-]{1,20}:)"),
     "tells": re.compile(r"^[A-Z][\w-]* (?:tells|whispers to|asks) you(?: [^:\n]*)?: "),
-    "say": re.compile(r"^[A-Z][\w-]*(?: [\w-]+)? (?:says|asks|exclaims)(?: [^:\n]*)?: "),
+    "say": re.compile(r"^([A-Z][\w-]*(?: [\w-]+)?) (?:says|asks|exclaims)(?: [^:\n]*)?: "),
 }
+# Spielernamen lernen: who-Liste (" Alice is   [Ro, DEv6]  Lib"), Kanaele, Tells
+WHO_HEADERS = ("Players", "Wizards")
+WHO_LINE_RE = re.compile(r"^ (\S.*?)\s+\[[^\]\n]*\]")
+CHANNEL_NAME_RE = re.compile(r"^\[[\w-]{1,20}:([A-Z][\w-]*)")
+TELL_NAME_RE = re.compile(r"^([A-Z][\w-]*) (?:tells|whispers to|asks) you")
+NAME_WORD_RE = re.compile(r"\b[A-Z][\w-]*")
 # Unvollstaendige letzte Zeile zurueckhalten, wenn sie schon als Chat erkennbar ist
 PARTIAL_PATTERNS = {
     "channels": re.compile(r"^\["),
@@ -66,15 +77,52 @@ PARTIAL_PATTERNS = {
 
 
 def active_filters() -> list[str]:
-    raw = os.environ.get("MUD_FILTER", "channels,tells")
+    raw = os.environ.get("MUD_FILTER", "channels,tells,say")
     names = [n.strip().lower() for n in raw.split(",") if n.strip()]
     if "none" in names:
         return []
     return [n for n in names if n in FILTER_PATTERNS]
 
 
-def filter_chat(text: str, filters: list[str]) -> tuple[str, int]:
-    """Entfernt Chat-Zeilen (samt eingerueckter Folgezeilen). Gibt (Text, Anzahl) zurueck."""
+def learn_players(text: str, players: set[str]) -> None:
+    """Sammelt Spielernamen aus who-Liste, Kanaelen und Tells in 'players'."""
+    in_who = False
+    for line in text.split("\n"):
+        body = line[len(PROMPT_PREFIX_RE.match(line).group(1)):]
+        if body.strip() in WHO_HEADERS:
+            in_who = True
+            continue
+        if in_who:
+            m = WHO_LINE_RE.match(body)
+            if m:
+                # alle gross geschriebenen Woerter, auch Vortitel wie "Lucky Old"
+                players.update(NAME_WORD_RE.findall(m.group(1)))
+                continue
+            in_who = False
+        m = CHANNEL_NAME_RE.match(body) or TELL_NAME_RE.match(body)
+        if m:
+            players.add(m.group(1))
+
+
+def is_hidden(body: str, filters: list[str], players: set[str] | None) -> bool:
+    for f in filters:
+        m = FILTER_PATTERNS[f].match(body)
+        if not m:
+            continue
+        if f == "say" and players is not None:
+            # nur Saetze von bekannten Spielern ausblenden, NPCs durchlassen
+            if not set(NAME_WORD_RE.findall(m.group(1))) & players:
+                continue
+        return True
+    return False
+
+
+def filter_chat(text: str, filters: list[str],
+                players: set[str] | None = None) -> tuple[str, int]:
+    """Entfernt Chat-Zeilen (samt eingerueckter Folgezeilen). Gibt (Text, Anzahl) zurueck.
+
+    Mit 'players' blendet der say-Filter nur Saetze dieser Spieler aus.
+    """
     if not filters:
         return text, 0
     out, hidden, in_msg = [], 0, False
@@ -84,7 +132,7 @@ def filter_chat(text: str, filters: list[str]) -> tuple[str, int]:
         if in_msg and body[:1] in (" ", "\t") and body.strip():
             continue                                     # Folgezeile einer umbrochenen Nachricht
         in_msg = False
-        if any(FILTER_PATTERNS[f].match(body) for f in filters):
+        if is_hidden(body, filters, players):
             hidden += 1
             in_msg = True
             if prefix:
@@ -108,6 +156,7 @@ class Session:
         self.pending = ""   # zurueckgehaltene, unvollstaendige Zeile (Filter)
         self.auto_page = True
         self.history = deque(maxlen=HISTORY_LINES)   # gefilterte Ausgabe, nur im Speicher
+        self.players = set()   # bekannte Spielernamen fuer den say-Filter, nur im Speicher
 
     def _process(self, data: bytes):
         """Trennt sichtbaren Text von Telnet-Kommandos, lehnt Optionen ab."""
@@ -205,7 +254,8 @@ class Session:
         if self.running and tail_body and any(PARTIAL_PATTERNS[f].match(tail_body) for f in filters):
             self.pending = tail
             text = head + sep
-        text, hidden = filter_chat(text, filters)
+        learn_players(text, self.players)
+        text, hidden = filter_chat(text, filters, self.players)
         if hidden:
             word = "Nachricht" if hidden == 1 else "Nachrichten"
             text += f"\n[{hidden} {word} anderer Spieler ausgeblendet]"

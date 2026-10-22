@@ -117,17 +117,32 @@ Gesteuert wird das über die Umgebungsvariable `MUD_FILTER` (Komma-Liste):
 |---|---|
 | `channels` | Kanalzeilen wie `[Bill] text` oder `[news:Bob enters the world]` |
 | `tells` | Private Nachrichten: `Bob tells you: …`, `Bob whispers to you: …` |
-| `say` | Sprache im Raum: `Bob says: …`. Trifft auch NPCs, darum nicht im Standard |
+| `say` | Sprache von Spielern im Raum: `Bob says: …`. Sätze von NPCs bleiben sichtbar (siehe unten) |
 | `none` | Kein Filter |
 
-Standard ist `channels,tells`. Anders einstellen:
+Standard ist `channels,tells,say`.
+
+Woher weiß der Server, wer Spieler ist? Er merkt sich Namen aus der `who`-Liste
+(Abschnitte `Players` und `Wizards`), aus Kanälen (`[fan:Joe …`) und aus
+Tells, nur im Arbeitsspeicher. Nur Sätze dieser Namen werden ausgeblendet. Ein
+unbekannter Sprecher gilt als NPC und bleibt sichtbar. Darum nach dem Login
+einmal `who` eingeben.
+
+Anders einstellen, z.B. um auch Sätze von Spielern zu sehen:
 
 ```powershell
-claude mcp add nightfall -s user -e MUD_FILTER=channels,tells,say -- <python> <pfad>\mud_mcp_server.py
+claude mcp add nightfall -s user -e MUD_FILTER=channels,tells -- <python> <pfad>\mud_mcp_server.py
 ```
 
+Kanalzeilen werden auch hinter einem Prompt erkannt (`> `, `> > `, `->>` nach
+einer Frage des MUDs) und wenn sie über mehrere Zeilen umbrochen sind, z.B.
+`[fan:Joe sings …` mit der schließenden `]` erst in der Folgezeile.
+
 Grenzen: Der Filter erkennt Nachrichten an ihrem Muster. Emotes (`Bob smiles at
-you`), Raummeldungen (`Bob arrives`) und die `who`-Liste bleiben sichtbar. Die
+you`), Raummeldungen (`Bob arrives`) und die `who`-Liste bleiben sichtbar, ebenso
+deine eigenen Sätze und Tells (`You say: …`, `You told Bob: …`). Sätze eines
+Spielers, der noch in keiner `who`-Liste, keinem Kanal und keinem Tell vorkam,
+bleiben sichtbar, weil er als NPC gilt. Die
 Muster für Tells und Says folgen üblichen LPmud-Formaten und sind für NightFall
 nicht im Detail geprüft.
 
@@ -166,7 +181,10 @@ mud_connect(host="127.0.0.1", port=4000)
 ```
 
 Befehle im Fake-MUD: `look`, `read map` (Pager), `chatter` (Nachrichten anderer
-Spieler), `split` (über zwei Pakete verteilte Nachricht), `quit`.
+Spieler), `split` (über zwei Pakete verteilte Nachricht), `prompted`
+(Kanalnachricht hinter einem `->>`-Prompt, über zwei Zeilen umbrochen), `who`
+(Spielerliste im NightFall-Format), `talk` (Sätze eines Spielers und zweier NPCs),
+`quit`.
 
 ## Mitwirken
 

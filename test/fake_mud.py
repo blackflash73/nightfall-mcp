@@ -11,6 +11,9 @@ Befehle im Spiel:
     read map   40 Zeilen im SMore-Pager (Leerzeile = weiter, q = beenden)
     chatter    schickt Channel-, Tell- und Say-Nachrichten "anderer Spieler"
     split      schickt eine Channel-Nachricht in zwei Paketen (0.6 s Abstand)
+    prompted   Channel-Nachricht hinter einem "->>"-Prompt (wie nach "pray")
+    who        Spielerliste im NightFall-Format (Joe, Alice)
+    talk       Saetze von Spielern (Alice) und NPCs (guard, story-teller)
     quit       speichert und trennt
 
 Manuell starten:   python test/fake_mud.py --port 4000
@@ -48,6 +51,31 @@ CHATTER = (
     "[chat:Alice] eine lange Nachricht, die der MUD umbricht und in der\r\n"
     "    naechsten Zeile eingerueckt fortsetzt\r\n"
     "The light brightens.\r\n"
+    "> "
+)
+
+PROMPTED = (
+    "You hear a hollow voice asking you :\r\n"
+    "Tell me the name!\r\n"
+    "->>[fan:Joe sings a very long song about cheese and keeps on singing about it while\r\n"
+    "   the sun goes down over the test hills.]\r\n"
+    "That's wrong.\r\n"
+    "> "
+)
+WHO = (
+    "Players\r\n"
+    " Guest1 the guest                                              [Hu,  1, ??v6]\r\n"
+    " Lucky Old Joe the well known bard                             [Ba, 22, USv4]  HLP\r\n"
+    "\r\n"
+    "Wizards\r\n"
+    " Alice is                                                          [Ro, DEv6]  Lib\r\n"
+    "> "
+)
+TALK = (
+    "Alice says: geheimes Gespraech\r\n"
+    "   mit Folgezeile\r\n"
+    "The guard says: Welcome, stranger.\r\n"
+    "The story-teller says : Once upon a time there was a test room...\r\n"
     "> "
 )
 
@@ -137,6 +165,12 @@ class Handler(socketserver.BaseRequestHandler):
             self.pager_page()
         elif cmd == "chatter":
             self.out(CHATTER)
+        elif cmd == "prompted":
+            self.out(PROMPTED)
+        elif cmd == "who":
+            self.out(WHO)
+        elif cmd == "talk":
+            self.out(TALK)
         elif cmd == "split":
             self.out("[Jame")
             time.sleep(0.6)

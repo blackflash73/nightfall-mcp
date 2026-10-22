@@ -117,17 +117,42 @@ class TestBasics(BridgeTest):
 
 
 class TestDefaultFilter(BridgeTest):
-    """Standard: channels,tells"""
+    """Standard: channels,tells,say"""
 
-    def test_channels_and_tells_hidden(self):
+    def test_channels_tells_and_say_hidden(self):
         self.login()
         out = self.send("chatter")
         for secret in ("Bill", "wer ist online", "Bob enters", "geheimes Passwort",
-                       "Alice", "eingerueckt fortsetzt"):
+                       "hallo zusammen", "Alice", "eingerueckt fortsetzt"):
             self.assertNotIn(secret, out)
-        self.assertIn("Bob says: hallo zusammen", out)   # say ist standardmaessig an
         self.assertIn("The light brightens.", out)
-        self.assertIn("[4 Nachrichten anderer Spieler ausgeblendet]", out)
+        self.assertIn("[5 Nachrichten anderer Spieler ausgeblendet]", out)
+
+    def test_player_say_hidden_npc_say_visible(self):
+        self.login()
+        self.send("who")                               # lernt Joe, Alice
+        out = self.send("talk")
+        self.assertNotIn("geheimes Gespraech", out)
+        self.assertNotIn("mit Folgezeile", out)
+        self.assertIn("The guard says: Welcome, stranger.", out)
+        self.assertIn("The story-teller says : Once upon a time", out)
+        self.assertIn("[1 Nachricht anderer Spieler ausgeblendet]", out)
+
+    def test_unknown_speaker_counts_as_npc(self):
+        # ohne who-Liste ist Alice unbekannt und bleibt sichtbar (dokumentierte Grenze)
+        self.login()
+        out = self.send("talk")
+        self.assertIn("Alice says: geheimes Gespraech", out)
+        self.assertIn("The guard says:", out)
+
+    def test_channel_behind_arrow_prompt_hidden(self):
+        self.login()
+        out = self.send("prompted")
+        self.assertNotIn("cheese", out)
+        self.assertNotIn("test hills", out)            # Folgezeile auch weg
+        self.assertIn("Tell me the name!", out)
+        self.assertIn("That's wrong.", out)
+        self.assertIn("[1 Nachricht anderer Spieler ausgeblendet]", out)
 
     def test_channel_message_split_across_reads(self):
         self.login()
@@ -139,17 +164,18 @@ class TestDefaultFilter(BridgeTest):
         self.assertIn("[1 Nachricht anderer Spieler ausgeblendet]", rest)
 
 
-class TestSayFilter(BridgeTest):
-    env = {"MUD_FILTER": "channels,tells,say"}
+class TestWithoutSayFilter(BridgeTest):
+    env = {"MUD_FILTER": "channels,tells"}
 
-    def test_say_hidden_too(self):
+    def test_say_visible(self):
         # normale Saetze bleiben unberuehrt
         self.assertIn("Please select a terminal type", self.send("guest"))
         self.send("dumb")
         out = self.send("chatter")
-        self.assertNotIn("hallo zusammen", out)
+        self.assertIn("Bob says: hallo zusammen", out)
+        self.assertNotIn("geheimes Passwort", out)
         self.assertIn("The light brightens.", out)
-        self.assertIn("[5 Nachrichten anderer Spieler ausgeblendet]", out)
+        self.assertIn("[4 Nachrichten anderer Spieler ausgeblendet]", out)
 
 
 class TestNoFilter(BridgeTest):
