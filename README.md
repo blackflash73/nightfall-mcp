@@ -116,7 +116,7 @@ Gesteuert wird das über die Umgebungsvariable `MUD_FILTER` (Komma-Liste):
 | Wert | Blendet aus |
 |---|---|
 | `channels` | Kanalzeilen wie `[Bill] text` oder `[news:Bob enters the world]` |
-| `tells` | Private Nachrichten: `Bob tells you: …`, `Bob whispers to you: …` |
+| `tells` | Private Nachrichten: `Bob tells you: …`, `Bob whispers to you: …`, auch deine eigenen (`You told Bob: …` und das Echo `tell Bob …`) |
 | `say` | Sprache von Spielern im Raum: `Bob says: …`. Sätze von NPCs bleiben sichtbar (siehe unten) |
 | `none` | Kein Filter |
 
@@ -140,7 +140,7 @@ einer Frage des MUDs) und wenn sie über mehrere Zeilen umbrochen sind, z.B.
 
 Grenzen: Der Filter erkennt Nachrichten an ihrem Muster. Emotes (`Bob smiles at
 you`), Raummeldungen (`Bob arrives`) und die `who`-Liste bleiben sichtbar, ebenso
-deine eigenen Sätze und Tells (`You say: …`, `You told Bob: …`). Sätze eines
+deine eigenen Sätze (`You say: …`). Sätze eines
 Spielers, der noch in keiner `who`-Liste, keinem Kanal und keinem Tell vorkam,
 bleiben sichtbar, weil er als NPC gilt. Die
 Muster für Tells und Says folgen üblichen LPmud-Formaten und sind für NightFall
@@ -184,7 +184,7 @@ Befehle im Fake-MUD: `look`, `read map` (Pager), `chatter` (Nachrichten anderer
 Spieler), `split` (über zwei Pakete verteilte Nachricht), `prompted`
 (Kanalnachricht hinter einem `->>`-Prompt, über zwei Zeilen umbrochen), `who`
 (Spielerliste im NightFall-Format), `talk` (Sätze eines Spielers und zweier NPCs),
-`quit`.
+`tell <name> <text>` (eigener Tell mit Befehlsecho), `quit`.
 
 ## Mitwirken
 

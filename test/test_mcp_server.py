@@ -138,6 +138,19 @@ class TestDefaultFilter(BridgeTest):
         self.assertIn("The story-teller says : Once upon a time", out)
         self.assertIn("[1 Nachricht anderer Spieler ausgeblendet]", out)
 
+    def test_own_tell_hidden(self):
+        self.login()
+        out = self.send("tell bob I live in Testtown")
+        self.assertNotIn("Testtown", out)
+        self.assertNotIn("You told", out)
+        self.assertIn("[2 Nachrichten anderer Spieler ausgeblendet]", out)
+
+    def test_tell_behind_pager_prompt_hidden(self):
+        self.login()
+        out = self.send("pagerprompt")
+        self.assertNotIn("geheim", out)
+        self.assertIn("[1 Nachricht anderer Spieler ausgeblendet]", out)
+
     def test_unknown_speaker_counts_as_npc(self):
         # ohne who-Liste ist Alice unbekannt und bleibt sichtbar (dokumentierte Grenze)
         self.login()

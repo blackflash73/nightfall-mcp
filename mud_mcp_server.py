@@ -26,7 +26,8 @@ Datenschutz: Nachrichten anderer Spieler werden VOR der Rueckgabe entfernt und
 landen so nicht im Claude-Session-Protokoll. Gesteuert ueber die Umgebungs-
 variable MUD_FILTER (Komma-Liste, Standard "channels,tells,say"):
     channels  Kanalzeilen wie "[Bill] text" oder "[news:Bob enters the world]"
-    tells     private Nachrichten: "Bob tells you: ...", "Bob whispers to you: ..."
+    tells     private Nachrichten: "Bob tells you: ...", "Bob whispers to you: ...",
+              auch die eigenen: "You told Bob: ..." und das Befehlsecho "tell Bob ..."
     say       Sprache von Spielern im Raum: "Bob says: ...". Saetze von NPCs bleiben
               sichtbar. Als Spieler gilt, wer in der who-Liste, in einem Kanal
               oder in einem Tell vorkam (nur im Speicher). Unbekannte Sprecher
@@ -53,13 +54,19 @@ MAX_PAGES = 50    # Schutz gegen Endlosschleifen
 HISTORY_LINES = 2000   # fuer mud_recent
 
 # --- Filter fuer Nachrichten anderer Spieler ---------------------------------
-# Prompt vor einer Nachricht, z.B. "> ", "> > " oder "->>" (nach Fragen des MUDs)
-PROMPT_PREFIX_RE = re.compile(r"^((?:-?>+ ?)*)")
+# Prompt vor einer Nachricht, z.B. "> ", "> > ", "->>" (nach Fragen des MUDs) oder
+# ein stehengebliebener Pager-Prompt "=== SMore: Lines 1..26 of 31 [...] " (Proxy-Modus)
+PROMPT_PREFIX_RE = re.compile(
+    r"^((?:-?>+ ?|=== SMore: Lines \d+\.\.\d+ of \d+ \[[^\]\n]*\] ?)*)")
 FILTER_PATTERNS = {
     # "[Bill] wer ist online?", "[news:Bob enters the world]", "[chat:Bob] hi"
     # "[fan:Joe sings ...", auch wenn die "]" erst in einer Folgezeile kommt
     "channels": re.compile(r"^\[(?:[^\]\n]{1,60}\](?: .*)?$|[\w-]{1,20}:)"),
-    "tells": re.compile(r"^[A-Z][\w-]* (?:tells|whispers to|asks) you(?: [^:\n]*)?: "),
+    # eingehend "Bob tells you: ...", eigene Bestaetigung "You told Bob: ..."
+    # und das Echo des eigenen Befehls "tell Bob ..."
+    "tells": re.compile(r"^(?:[A-Z][\w-]* (?:tells|whispers to|asks) you(?: [^:\n]*)?: "
+                        r"|You (?:told|tell|whisper to|whispered to) [\w-]+(?: [^:\n]*)?: "
+                        r"|(?:tell|whisper|reply) [\w-]+ )"),
     "say": re.compile(r"^([A-Z][\w-]*(?: [\w-]+)?) (?:says|asks|exclaims)(?: [^:\n]*)?: "),
 }
 # Spielernamen lernen: who-Liste (" Alice is   [Ro, DEv6]  Lib"), Kanaele, Tells

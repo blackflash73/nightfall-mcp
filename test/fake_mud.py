@@ -14,6 +14,8 @@ Befehle im Spiel:
     prompted   Channel-Nachricht hinter einem "->>"-Prompt (wie nach "pray")
     who        Spielerliste im NightFall-Format (Joe, Alice)
     talk       Saetze von Spielern (Alice) und NPCs (guard, story-teller)
+    tell X Y   eigener Tell: Echo "tell X Y" und "You told X: Y"
+    pagerprompt  Tell direkt hinter einem stehengebliebenen Pager-Prompt
     quit       speichert und trennt
 
 Manuell starten:   python test/fake_mud.py --port 4000
@@ -167,6 +169,12 @@ class Handler(socketserver.BaseRequestHandler):
             self.out(CHATTER)
         elif cmd == "prompted":
             self.out(PROMPTED)
+        elif cmd.startswith("tell "):
+            name, _, msg = cmd[5:].partition(" ")
+            # Echo des Befehls wie bei NightFall, dann die Bestaetigung
+            self.out(f"{cmd}\r\nYou told {name.capitalize()}: {msg}\r\n> ")
+        elif cmd == "pagerprompt":
+            self.out("=== SMore: Lines 1..26 of 31 [CR,u,f,l,p,q] You told Bob: geheim\r\n> ")
         elif cmd == "who":
             self.out(WHO)
         elif cmd == "talk":
